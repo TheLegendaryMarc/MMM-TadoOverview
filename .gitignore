@@ -1,0 +1,6 @@
+# Tado OAuth2 refresh token – never commit this
+.tado-tokens.json
+
+# Node
+node_modules/
+npm-debug.log*

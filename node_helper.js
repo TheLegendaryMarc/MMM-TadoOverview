@@ -1,145 +1,243 @@
 /**
  * node_helper.js – MMM-TadoOverview
  *
- * Handles all communication with the Tado REST API v2.
+ * Authentication: OAuth2 Device Code Grant Flow (RFC 8628)
+ *   Tado switched from password grant to device code grant on 21 March 2025.
+ *   Docs: https://support.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api
  *
- * Authentication flow (OAuth2 password grant):
- *   POST https://auth.tado.com/oauth/token
- *       → access_token + expires_in
+ * First run:
+ *   1. POST /oauth2/device_authorize  → device_code, user_code, verification_uri
+ *   2. Module shows user_code + URL on the mirror
+ *   3. User visits the URL on any device and logs in with their Tado account
+ *   4. Module polls /oauth2/token until approved
+ *   5. Tokens are saved to .tado-tokens.json (gitignored)
  *
- * Data flow:
- *   GET /api/v2/me                                → homeId
- *   GET /api/v2/homes/{homeId}/zones              → zone list
- *   GET /api/v2/homes/{homeId}/zones/{id}/state   → temperature / humidity
+ * Subsequent runs:
+ *   - Refresh token is loaded from .tado-tokens.json
+ *   - Access token is refreshed silently before every expiry (token rotation)
+ *   - If refresh token is expired (> 30 days unused), device code flow restarts
  */
 
 "use strict";
 
 const NodeHelper = require("node_helper");
 const https      = require("https");
-const http       = require("http");
+const fs         = require("fs");
+const path       = require("path");
 
-// ── Tado OAuth2 constants (publicly known, intentionally shipped) ──────────
-const TADO_AUTH_HOST   = "auth.tado.com";
-const TADO_API_HOST    = "my.tado.com";
-const OAUTH_CLIENT_ID  = "tado-web-app";
-const OAUTH_CLIENT_SECRET = "wZaRN7rpjn3FoNyF5IFuxg9uMzYJcvvR";
+// ── Tado / OAuth constants ────────────────────────────────────────────────────
+const TADO_AUTH_HOST = "login.tado.com";
+const TADO_API_HOST  = "my.tado.com";
+const CLIENT_ID      = "1bb50063-6b0c-4d11-bd99-387f4a91cc46";
+const SCOPE          = "offline_access";
+const TOKEN_FILE     = path.join(__dirname, ".tado-tokens.json");
+
+// ── Auth states ───────────────────────────────────────────────────────────────
+const STATE = {
+  IDLE:          "IDLE",
+  AWAITING_AUTH: "AWAITING_AUTH",
+  AUTHENTICATED: "AUTHENTICATED"
+};
 
 module.exports = NodeHelper.create({
 
   start() {
-    console.log(`[MMM-TadoOverview] Node helper started.`);
+    console.log("[MMM-TadoOverview] Node helper started.");
     this.config       = null;
+    this.authState    = STATE.IDLE;
     this.accessToken  = null;
-    this.tokenExpiry  = 0;      // Unix ms timestamp
+    this.tokenExpiry  = 0;
+    this.refreshToken = null;
     this.homeId       = null;
-    this.timer        = null;
+    this.dataTimer    = null;
+    this.pollTimer    = null;
   },
 
   stop() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    clearInterval(this.dataTimer);
+    clearTimeout(this.pollTimer);
   },
 
-  // ── Socket notifications from the browser module ─────────────────────────
+  // ── Entry point ─────────────────────────────────────────────────────────────
 
   socketNotificationReceived(notification, payload) {
     if (notification === "TADO_CONFIG") {
       this.config = payload;
-
-      // Clear any existing timer first
-      if (this.timer) {
-        clearInterval(this.timer);
-        this.timer = null;
-      }
-
-      // Initial fetch, then on interval
-      this.fetchAllRooms();
-      this.timer = setInterval(
-        () => this.fetchAllRooms(),
-        this.config.updateInterval
-      );
+      this.initialize();
     }
   },
 
-  // ── OAuth2 authentication ─────────────────────────────────────────────────
+  async initialize() {
+    clearInterval(this.dataTimer);
+    clearTimeout(this.pollTimer);
 
-  async ensureToken() {
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return; // token still valid
+    // Try stored refresh token first
+    const stored = this.loadStoredTokens();
+    if (stored?.refreshToken) {
+      console.log("[MMM-TadoOverview] Found stored refresh token, using it.");
+      this.refreshToken = stored.refreshToken;
+      this.authState    = STATE.AUTHENTICATED;
+      this.startDataFetching();
+      return;
     }
 
-    const body = new URLSearchParams({
-      client_id:     OAUTH_CLIENT_ID,
-      client_secret: OAUTH_CLIENT_SECRET,
-      grant_type:    "password",
-      username:      this.config.username,
-      password:      this.config.password,
-      scope:         "home.user"
-    }).toString();
+    // No token on disk → start device code flow
+    await this.startDeviceCodeFlow();
+  },
 
-    const data = await this.httpsRequest({
-      hostname: TADO_AUTH_HOST,
-      path:     "/oauth/token",
-      method:   "POST",
-      headers:  {
-        "Content-Type":   "application/x-www-form-urlencoded",
-        "Content-Length": Buffer.byteLength(body)
+  // ── Device Code Flow ────────────────────────────────────────────────────────
+
+  async startDeviceCodeFlow() {
+    console.log("[MMM-TadoOverview] Starting device code authorization flow …");
+    try {
+      const body = this.encodeForm({ client_id: CLIENT_ID, scope: SCOPE });
+      const res  = await this.authPost("/oauth2/device_authorize", body);
+
+      if (!res.device_code) {
+        throw new Error("No device_code in response: " + JSON.stringify(res));
       }
-    }, body);
 
-    if (!data.access_token) {
-      throw new Error(
-        data.error_description || data.error || "Authentication failed"
+      this.authState = STATE.AWAITING_AUTH;
+
+      this.sendSocketNotification("TADO_AUTH_REQUIRED", {
+        userCode:        res.user_code,
+        verificationUri: res.verification_uri_complete || res.verification_uri,
+        expiresIn:       res.expires_in
+      });
+
+      this.pollForToken(
+        res.device_code,
+        res.interval   ?? 5,
+        res.expires_in ?? 300
       );
+
+    } catch (err) {
+      console.error("[MMM-TadoOverview] Device code flow error:", err.message);
+      this.sendSocketNotification("TADO_ERROR", `Auth start failed: ${err.message}`);
+    }
+  },
+
+  pollForToken(deviceCode, intervalSec, expiresIn) {
+    const deadline = Date.now() + expiresIn * 1000;
+
+    const attempt = async () => {
+      if (Date.now() >= deadline) {
+        this.sendSocketNotification(
+          "TADO_ERROR",
+          "Authentifizierung abgelaufen. Bitte MagicMirror neu starten."
+        );
+        return;
+      }
+
+      try {
+        const body = this.encodeForm({
+          client_id:   CLIENT_ID,
+          device_code: deviceCode,
+          grant_type:  "urn:ietf:params:oauth:grant-type:device_code"
+        });
+
+        // Accept both 200 (approved) and 400 (pending / slow_down)
+        const { status, data } = await this.authPostRaw("/oauth2/token", body);
+
+        if (status === 200 && data.access_token) {
+          // ── Authorised ────────────────────────────────────────────────────
+          console.log("[MMM-TadoOverview] Device authorised – tokens received.");
+          this.accessToken  = data.access_token;
+          this.tokenExpiry  = Date.now() + (data.expires_in - 10) * 1000;
+          this.refreshToken = data.refresh_token;
+          this.saveTokens({ refreshToken: data.refresh_token });
+          this.authState = STATE.AUTHENTICATED;
+          this.startDataFetching();
+
+        } else if (data.error === "slow_down") {
+          // Server asked us to back off
+          this.pollTimer = setTimeout(attempt, (intervalSec + 5) * 1000);
+
+        } else if (
+          data.error === "authorization_pending" ||
+          data.error === "authorization_declined" ||
+          status === 400
+        ) {
+          // Still waiting
+          this.pollTimer = setTimeout(attempt, intervalSec * 1000);
+
+        } else {
+          throw new Error(data.error_description || data.error || `HTTP ${status}`);
+        }
+
+      } catch (err) {
+        // Network hiccup – retry rather than give up
+        console.warn("[MMM-TadoOverview] Poll error (will retry):", err.message);
+        this.pollTimer = setTimeout(attempt, intervalSec * 1000);
+      }
+    };
+
+    // First poll after interval
+    this.pollTimer = setTimeout(attempt, intervalSec * 1000);
+  },
+
+  // ── Token management ────────────────────────────────────────────────────────
+
+  async ensureAccessToken() {
+    if (this.accessToken && Date.now() < this.tokenExpiry) return;
+
+    if (!this.refreshToken) {
+      throw new Error("Kein Refresh-Token vorhanden. Bitte neu anmelden.");
+    }
+
+    console.log("[MMM-TadoOverview] Refreshing access token …");
+    const body = this.encodeForm({
+      client_id:     CLIENT_ID,
+      grant_type:    "refresh_token",
+      refresh_token: this.refreshToken
+    });
+
+    let data;
+    try {
+      data = await this.authPost("/oauth2/token", body);
+    } catch (err) {
+      // Refresh token likely expired (> 30 days) → restart device code flow
+      console.warn("[MMM-TadoOverview] Refresh failed – restarting auth:", err.message);
+      this.refreshToken = null;
+      this.accessToken  = null;
+      this.tokenExpiry  = 0;
+      this.homeId       = null;
+      this.deleteStoredTokens();
+      clearInterval(this.dataTimer);
+      this.dataTimer = null;
+      await this.startDeviceCodeFlow();
+      throw new Error("Refresh-Token abgelaufen – bitte neu authentifizieren.");
     }
 
     this.accessToken = data.access_token;
-    // Subtract 60 s buffer so we refresh slightly before actual expiry
-    this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
-    console.log("[MMM-TadoOverview] Token acquired.");
-  },
+    this.tokenExpiry = Date.now() + (data.expires_in - 10) * 1000;
 
-  // ── Tado API helpers ──────────────────────────────────────────────────────
-
-  async tadoGet(path) {
-    await this.ensureToken();
-    return this.httpsRequest({
-      hostname: TADO_API_HOST,
-      path,
-      method:   "GET",
-      headers:  { Authorization: `Bearer ${this.accessToken}` }
-    });
-  },
-
-  async getHomeId() {
-    if (this.homeId) return this.homeId;
-    const me = await this.tadoGet("/api/v2/me");
-    if (!me.homes || me.homes.length === 0) {
-      throw new Error("No Tado home found for this account.");
+    // Tado uses refresh token rotation – always save the newest token
+    if (data.refresh_token) {
+      this.refreshToken = data.refresh_token;
+      this.saveTokens({ refreshToken: data.refresh_token });
     }
-    this.homeId = me.homes[0].id;
-    console.log(`[MMM-TadoOverview] Using home ID: ${this.homeId}`);
-    return this.homeId;
   },
 
-  // ── Main data fetch ───────────────────────────────────────────────────────
+  // ── Data fetching ────────────────────────────────────────────────────────────
+
+  startDataFetching() {
+    if (this.dataTimer) clearInterval(this.dataTimer);
+    this.fetchAllRooms();
+    this.dataTimer = setInterval(
+      () => this.fetchAllRooms(),
+      this.config.updateInterval
+    );
+  },
 
   async fetchAllRooms() {
     try {
       const homeId = await this.getHomeId();
+      const zones  = await this.tadoGet(`/api/v2/homes/${homeId}/zones`);
 
-      // All zones for this home
-      const zones = await this.tadoGet(`/api/v2/homes/${homeId}/zones`);
-
-      // Only heating zones have temperature/humidity sensor data
       const heatingZones = zones.filter(z => z.type === "HEATING");
-
-      // Optional zone ID filter from config
       const filtered =
-        this.config.roomIds && this.config.roomIds.length > 0
+        this.config.roomIds?.length > 0
           ? heatingZones.filter(z => this.config.roomIds.includes(z.id))
           : heatingZones;
 
@@ -148,32 +246,21 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      // Fetch all zone states in parallel
       const rooms = await Promise.all(
         filtered.map(zone => this.fetchZoneState(homeId, zone))
       );
 
-      // Sort alphabetically by room name
       rooms.sort((a, b) => a.name.localeCompare(b.name));
-
       this.sendSocketNotification("TADO_DATA", rooms);
 
     } catch (err) {
-      console.error("[MMM-TadoOverview] Error fetching data:", err.message);
-      // Reset cached token and home ID on auth errors
-      if (err.message.includes("401") || err.message.includes("auth")) {
-        this.accessToken = null;
-        this.homeId      = null;
-      }
+      console.error("[MMM-TadoOverview] fetchAllRooms error:", err.message);
       this.sendSocketNotification("TADO_ERROR", err.message);
     }
   },
 
   async fetchZoneState(homeId, zone) {
-    const state = await this.tadoGet(
-      `/api/v2/homes/${homeId}/zones/${zone.id}/state`
-    );
-
+    const state  = await this.tadoGet(`/api/v2/homes/${homeId}/zones/${zone.id}/state`);
     const inside = state.sensorDataPoints?.insideTemperature;
     const hum    = state.sensorDataPoints?.humidity;
     const heat   = state.activityDataPoints?.heatingPower;
@@ -181,44 +268,134 @@ module.exports = NodeHelper.create({
     return {
       id:           zone.id,
       name:         zone.name,
-      temperature:  inside  != null ? inside.celsius   : null,
-      humidity:     hum     != null ? hum.percentage   : null,
-      heatingPower: heat    != null ? heat.percentage  : 0,
-      tadoMode:     state.tadoMode         || null,
-      overlayType:  state.overlay?.type    || null
+      temperature:  inside != null ? inside.celsius    : null,
+      humidity:     hum    != null ? hum.percentage    : null,
+      heatingPower: heat   != null ? heat.percentage   : 0,
+      tadoMode:     state.tadoMode      || null,
+      overlayType:  state.overlay?.type || null
     };
   },
 
-  // ── Low-level HTTPS helper ────────────────────────────────────────────────
+  async getHomeId() {
+    if (this.homeId) return this.homeId;
+    const me = await this.tadoGet("/api/v2/me");
+    if (!me.homes?.length) throw new Error("Kein Tado-Zuhause für dieses Konto gefunden.");
+    this.homeId = me.homes[0].id;
+    console.log(`[MMM-TadoOverview] Home ID: ${this.homeId}`);
+    return this.homeId;
+  },
 
-  httpsRequest(options, body = null) {
+  async tadoGet(path) {
+    await this.ensureAccessToken();
+    return this.httpsRequest({
+      hostname: TADO_API_HOST,
+      path,
+      method:   "GET",
+      headers:  { Authorization: `Bearer ${this.accessToken}` }
+    });
+  },
+
+  // ── Token persistence ────────────────────────────────────────────────────────
+
+  loadStoredTokens() {
+    try {
+      if (fs.existsSync(TOKEN_FILE)) {
+        return JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8"));
+      }
+    } catch (e) {
+      console.warn("[MMM-TadoOverview] Could not read token file:", e.message);
+    }
+    return null;
+  },
+
+  saveTokens(tokens) {
+    try {
+      fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+    } catch (e) {
+      console.warn("[MMM-TadoOverview] Could not save token file:", e.message);
+    }
+  },
+
+  deleteStoredTokens() {
+    try {
+      if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
+    } catch (e) {
+      console.warn("[MMM-TadoOverview] Could not delete token file:", e.message);
+    }
+  },
+
+  // ── HTTP helpers ─────────────────────────────────────────────────────────────
+
+  /** POST to auth host, expect 200, resolve parsed JSON or throw. */
+  authPost(path, bodyStr) {
+    return this.httpsRequest({
+      hostname: TADO_AUTH_HOST,
+      path,
+      method:   "POST",
+      headers:  {
+        "Content-Type":   "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(bodyStr)
+      }
+    }, bodyStr);
+  },
+
+  /**
+   * POST to auth host, resolve { status, data } for ANY status code.
+   * Used during polling where 400 + authorization_pending is normal.
+   */
+  authPostRaw(path, bodyStr) {
     return new Promise((resolve, reject) => {
-      const protocol = options.port === 80 ? http : https;
+      const options = {
+        hostname: TADO_AUTH_HOST,
+        path,
+        method:  "POST",
+        headers: {
+          "Content-Type":   "application/x-www-form-urlencoded",
+          "Content-Length": Buffer.byteLength(bodyStr)
+        }
+      };
 
-      const req = protocol.request(options, res => {
+      const req = https.request(options, res => {
         let raw = "";
         res.setEncoding("utf8");
         res.on("data",  chunk => { raw += chunk; });
-        res.on("end", () => {
-          if (res.statusCode >= 400) {
-            reject(new Error(
-              `HTTP ${res.statusCode} on ${options.path}: ${raw.slice(0, 200)}`
-            ));
-            return;
-          }
-          try {
-            resolve(JSON.parse(raw));
-          } catch {
-            // Some endpoints return empty body on success
-            resolve({});
-          }
+        res.on("end",   () => {
+          let data = {};
+          try { data = JSON.parse(raw); } catch {}
+          resolve({ status: res.statusCode, data });
         });
       });
 
       req.on("error", reject);
+      req.write(bodyStr);
+      req.end();
+    });
+  },
 
+  /** Generic HTTPS GET – expects 2xx, resolves parsed JSON or throws. */
+  httpsRequest(options, body = null) {
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, res => {
+        let raw = "";
+        res.setEncoding("utf8");
+        res.on("data",  chunk => { raw += chunk; });
+        res.on("end",   () => {
+          if (res.statusCode >= 400) {
+            reject(new Error(`HTTP ${res.statusCode} for ${options.path}: ${raw.slice(0, 300)}`));
+            return;
+          }
+          try   { resolve(JSON.parse(raw)); }
+          catch { resolve({}); }
+        });
+      });
+
+      req.on("error", reject);
       if (body) req.write(body);
       req.end();
     });
+  },
+
+  encodeForm(params) {
+    return new URLSearchParams(params).toString();
   }
 });

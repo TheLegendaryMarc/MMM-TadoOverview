@@ -38,6 +38,40 @@ No extra npm packages required – the module uses only built-in Node.js modules
 
 ---
 
+## Authentication
+
+This module uses the **OAuth2 Device Code Grant Flow** (RFC 8628) – the method
+[officially required by Tado since 21 March 2025](https://support.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api).
+
+### How it works
+
+```
+First start
+───────────
+  1. Module requests a device code from Tado
+  2. Mirror shows a short code (e.g. ABCD-1234) and a URL
+  3. Open the URL on any device → log in with your Tado account → confirm
+  4. Module detects the approval automatically and starts showing your rooms
+
+Subsequent starts
+─────────────────
+  The refresh token is saved to .tado-tokens.json inside the module folder.
+  No further action required – the module authenticates silently.
+```
+
+> **Refresh token rotation:** Tado rotates refresh tokens on every use.
+> The module always saves the newest token automatically.
+> Tokens expire after 30 days of inactivity; in that case the mirror will
+> simply show the pairing screen again.
+
+### Security note
+
+`.tado-tokens.json` is saved with permissions `600` (owner read/write only)
+and is excluded from git via `.gitignore`.  
+Your Tado credentials are never stored anywhere.
+
+---
+
 ## Configuration
 
 Add the following block to your `config/config.js`:
@@ -48,10 +82,6 @@ Add the following block to your `config/config.js`:
   position: "top_right",       // any valid MagicMirror position
   header: "Room Climate",      // optional heading
   config: {
-
-    // ── Required: Tado credentials ────────────────────────────────────────
-    username: "your@email.com",
-    password: "yourPassword",
 
     // ── Optional: room filter ─────────────────────────────────────────────
     // Leave empty to show ALL rooms, or provide specific zone IDs:
@@ -78,14 +108,14 @@ Add the following block to your `config/config.js`:
 
 ### Finding your Room IDs
 
-Start MagicMirror once with `roomIds: []` – all rooms will appear automatically.
-If you only want to display specific rooms, query the Tado API after logging in:
+Start MagicMirror with `roomIds: []` – all rooms are shown automatically.
+To display only specific rooms, query the Tado API after logging in:
 
 ```
 https://my.tado.com/api/v2/homes/YOUR_HOME_ID/zones
 ```
 
-The `id` field of each zone entry is what you put in `roomIds`.
+The `id` field of each zone entry is what you put into `roomIds`.
 
 ---
 
@@ -93,10 +123,8 @@ The `id` field of each zone entry is what you put in `roomIds`.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `username` | String | `""` | Your Tado account e-mail (**required**) |
-| `password` | String | `""` | Your Tado account password (**required**) |
 | `roomIds` | Array | `[]` | Zone IDs to display; empty = show all rooms |
-| `updateInterval` | Number | `300000` | Refresh interval in milliseconds (min. 60 000) |
+| `updateInterval` | Number | `300000` | Refresh interval in ms (minimum: 60 000) |
 | `tempCold` | Number | `18` | Upper bound for "cold" colour (°C) |
 | `tempNormal` | Number | `22` | Upper bound for "normal" colour (°C) |
 | `tempHot` | Number | `25` | Upper bound for "warm" colour, above = "hot" (°C) |
@@ -110,38 +138,47 @@ The `id` field of each zone entry is what you put in `roomIds`.
 
 ## How It Works
 
-### Authentication
-
-The module authenticates against the Tado cloud using the **OAuth2 Password Grant** flow:
-
-```
-POST https://auth.tado.com/oauth/token
-```
-
-The access token is refreshed automatically before it expires – no manual renewal needed. Your credentials are stored only in your local `config.js` and are never shared with any third party.
-
-### Data Flow
+### Authentication flow (Device Code Grant)
 
 ```
 node_helper.js
   │
-  ├─ POST auth.tado.com/oauth/token   → access token
-  ├─ GET  my.tado.com/api/v2/me       → home ID
-  ├─ GET  …/homes/{id}/zones          → room list
-  └─ GET  …/zones/{id}/state          → temp · humidity · heating (parallel)
-        │
-        └─ sendSocketNotification → MMM-TadoOverview.js → DOM update
+  ├─ POST login.tado.com/oauth2/device_authorize
+  │       → device_code, user_code, verification_uri
+  │
+  ├─ Mirror shows user_code + URL
+  │
+  ├─ Poll login.tado.com/oauth2/token (every ~5 s)
+  │   ├─ 400 authorization_pending → keep polling
+  │   └─ 200 access_token          → save refresh_token to disk
+  │
+  └─ On next start / token expiry:
+       POST login.tado.com/oauth2/token (grant_type=refresh_token)
+           → new access_token + new refresh_token (rotation)
 ```
 
-### File Structure
+### Data flow
+
+```
+node_helper.js
+  │
+  ├─ GET  my.tado.com/api/v2/me                     → home ID
+  ├─ GET  …/homes/{homeId}/zones                    → room list
+  └─ GET  …/homes/{homeId}/zones/{id}/state (×N)   → temp · humidity · heating
+        │
+        └─ sendSocketNotification("TADO_DATA") → MMM-TadoOverview.js → DOM
+```
+
+### File structure
 
 ```
 MMM-TadoOverview/
-├── MMM-TadoOverview.js    Main module – DOM rendering, tile colours
-├── node_helper.js          Node.js helper – Tado API, OAuth2 token handling
-├── MMM-TadoOverview.css   Tile styles – gradients, grid, badges, spinner
-├── package.json            Module metadata
-└── README.md               This file
+├── MMM-TadoOverview.js    Main module – DOM rendering, tile colours, auth screen
+├── node_helper.js          Node.js helper – OAuth2 device code flow, token refresh, API calls
+├── MMM-TadoOverview.css   Tile styles – gradients, grid, badges, auth screen, spinner
+├── package.json            Module metadata (no external dependencies)
+├── README.md               This file
+└── .tado-tokens.json       Auto-created on first auth – contains only the refresh token
 ```
 
 ---
@@ -150,10 +187,11 @@ MMM-TadoOverview/
 
 | Symptom | Solution |
 |---|---|
-| "Verbinde mit Tado …" stays forever | Check that `username` and `password` are correct |
-| Tile shows `—` for temperature | The zone has no indoor sensor; Tado reports no data |
+| Auth screen keeps appearing | Token file may be corrupted – delete `.tado-tokens.json` and re-authenticate |
+| Auth screen appeared but never went away | The device code expires after ~5 min; restart MagicMirror to get a new one |
+| Tile shows `—` for temperature | The zone has no indoor sensor (e.g. extension kit only) |
 | Some rooms are missing | Confirm the zone IDs in `roomIds` match the API response |
-| Module stops updating | Check MagicMirror logs (`pm2 logs`); token refresh is automatic |
+| Module stops updating after ~30 days | Refresh token expired – auth screen will appear automatically for re-login |
 
 ---
 
