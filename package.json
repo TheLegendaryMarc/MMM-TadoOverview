@@ -1,0 +1,12 @@
+{
+  "name": "mmm-tadooverview",
+  "version": "1.0.0",
+  "description": "MagicMirror module to display Tado room temperatures and humidity as tiles",
+  "main": "MMM-TadoOverview.js",
+  "keywords": ["magicmirror", "tado", "smart-home", "temperature", "humidity"],
+  "author": "MMM-TadoOverview Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
