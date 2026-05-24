@@ -152,7 +152,7 @@ Module.register("MMM-TadoOverview", {
     const body = document.createElement("div");
     body.className = "tado-auth-body";
 
-    // ── Left column: QR code ──────────────────────────────────────────────
+    // ── Top: QR code ─────────────────────────────────────────────────────
     if (info.qrSvg) {
       const qrCol = document.createElement("div");
       qrCol.className = "tado-auth-qr-col";
@@ -176,7 +176,7 @@ Module.register("MMM-TadoOverview", {
       body.appendChild(divider);
     }
 
-    // ── Right column: URL + user code ────────────────────────────────────
+    // ── Bottom: URL + user code ───────────────────────────────────────────
     const textCol = document.createElement("div");
     textCol.className = "tado-auth-text-col";
 
