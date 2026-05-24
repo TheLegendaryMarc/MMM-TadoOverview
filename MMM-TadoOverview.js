@@ -19,10 +19,6 @@
 Module.register("MMM-TadoOverview", {
 
   defaults: {
-    // ── Room filter ───────────────────────────────────────────────────────
-    // Leave empty [] to display ALL rooms, or specify zone IDs: [1, 2, 5]
-    roomIds: [],
-
     // ── Refresh interval ─────────────────────────────────────────────────
     updateInterval: 5 * 60 * 1000,   // 5 minutes
 
@@ -49,7 +45,6 @@ Module.register("MMM-TadoOverview", {
     this.loaded    = false;
 
     this.sendSocketNotification("TADO_CONFIG", {
-      roomIds:        this.config.roomIds,
       updateInterval: this.config.updateInterval,
       units:          this.config.units
     });

@@ -252,18 +252,19 @@ module.exports = NodeHelper.create({
       const zones  = await this.tadoGet(`/api/v2/homes/${homeId}/zones`);
 
       const heatingZones = zones.filter(z => z.type === "HEATING");
-      const filtered =
-        this.config.roomIds?.length > 0
-          ? heatingZones.filter(z => this.config.roomIds.includes(z.id))
-          : heatingZones;
 
-      if (filtered.length === 0) {
+      console.log(
+        `[MMM-TadoOverview] ${heatingZones.length} Raum/Räume von der Tado API erhalten:`,
+        heatingZones.map(z => `"${z.name}" (ID ${z.id})`).join(", ")
+      );
+
+      if (heatingZones.length === 0) {
         this.sendSocketNotification("TADO_DATA", []);
         return;
       }
 
       const rooms = await Promise.all(
-        filtered.map(zone => this.fetchZoneState(homeId, zone))
+        heatingZones.map(zone => this.fetchZoneState(homeId, zone))
       );
 
       rooms.sort((a, b) => a.name.localeCompare(b.name));

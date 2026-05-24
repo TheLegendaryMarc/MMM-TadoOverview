@@ -83,11 +83,6 @@ Add the following block to your `config/config.js`:
   header: "Room Climate",      // optional heading
   config: {
 
-    // ── Optional: room filter ─────────────────────────────────────────────
-    // Leave empty to show ALL rooms, or provide specific zone IDs:
-    // roomIds: [1, 5, 12]
-    roomIds: [],
-
     // ── Optional: update interval (milliseconds) ──────────────────────────
     updateInterval: 5 * 60 * 1000,   // default: every 5 minutes
 
@@ -106,24 +101,12 @@ Add the following block to your `config/config.js`:
 }
 ```
 
-### Finding your Room IDs
-
-Start MagicMirror with `roomIds: []` – all rooms are shown automatically.
-To display only specific rooms, query the Tado API after logging in:
-
-```
-https://my.tado.com/api/v2/homes/YOUR_HOME_ID/zones
-```
-
-The `id` field of each zone entry is what you put into `roomIds`.
-
 ---
 
 ## Configuration Reference
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `roomIds` | Array | `[]` | Zone IDs to display; empty = show all rooms |
 | `updateInterval` | Number | `300000` | Refresh interval in ms (minimum: 60 000) |
 | `tempCold` | Number | `18` | Upper bound for "cold" colour (°C) |
 | `tempNormal` | Number | `22` | Upper bound for "normal" colour (°C) |
@@ -190,7 +173,7 @@ MMM-TadoOverview/
 | Auth screen keeps appearing | Token file may be corrupted – delete `.tado-tokens.json` and re-authenticate |
 | Auth screen appeared but never went away | The device code expires after ~5 min; restart MagicMirror to get a new one |
 | Tile shows `—` for temperature | The zone has no indoor sensor (e.g. extension kit only) |
-| Some rooms are missing | Confirm the zone IDs in `roomIds` match the API response |
+| Unexpected rooms are shown | Check the MagicMirror log – all rooms returned by the API are listed there |
 | Module stops updating after ~30 days | Refresh token expired – auth screen will appear automatically for re-login |
 
 ---
