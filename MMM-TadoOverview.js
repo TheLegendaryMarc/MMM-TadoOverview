@@ -143,25 +143,72 @@ Module.register("MMM-TadoOverview", {
     const screen = document.createElement("div");
     screen.className = "tado-auth-screen";
 
-    screen.innerHTML = `
-      <div class="tado-auth-title">
-        <span class="tado-auth-icon">🔑</span>
-        Tado Anmeldung erforderlich
-      </div>
-      <div class="tado-auth-body">
-        <p class="tado-auth-hint">
-          Öffne die folgende Adresse auf deinem Smartphone oder Computer
-          und melde dich mit deinem Tado-Konto an:
-        </p>
-        <div class="tado-auth-url">${info.verificationUri}</div>
-        <p class="tado-auth-hint">Oder gib diesen Code manuell ein:</p>
-        <div class="tado-auth-code">${info.userCode}</div>
-        <p class="tado-auth-hint tado-auth-wait">
-          <span class="tado-spinner"></span>
-          Warte auf Bestätigung …
-        </p>
-      </div>`;
+    // Title
+    const title = document.createElement("div");
+    title.className = "tado-auth-title";
+    title.innerHTML = `<span class="tado-auth-icon">🔑</span> Tado Anmeldung erforderlich`;
+    screen.appendChild(title);
 
+    const body = document.createElement("div");
+    body.className = "tado-auth-body";
+
+    // ── Left column: QR code ──────────────────────────────────────────────
+    if (info.qrSvg) {
+      const qrCol = document.createElement("div");
+      qrCol.className = "tado-auth-qr-col";
+
+      const qrWrap = document.createElement("div");
+      qrWrap.className = "tado-auth-qr-wrap";
+      qrWrap.innerHTML = info.qrSvg;   // inline SVG – no extra request needed
+
+      const qrLabel = document.createElement("p");
+      qrLabel.className = "tado-auth-hint";
+      qrLabel.textContent = "QR-Code scannen";
+
+      qrCol.appendChild(qrWrap);
+      qrCol.appendChild(qrLabel);
+      body.appendChild(qrCol);
+
+      // Divider
+      const divider = document.createElement("div");
+      divider.className = "tado-auth-divider";
+      divider.innerHTML = `<span>oder</span>`;
+      body.appendChild(divider);
+    }
+
+    // ── Right column: URL + user code ────────────────────────────────────
+    const textCol = document.createElement("div");
+    textCol.className = "tado-auth-text-col";
+
+    const hintUrl = document.createElement("p");
+    hintUrl.className = "tado-auth-hint";
+    hintUrl.textContent = "Diese Adresse im Browser öffnen:";
+    textCol.appendChild(hintUrl);
+
+    const urlEl = document.createElement("div");
+    urlEl.className = "tado-auth-url";
+    urlEl.textContent = info.verificationUri;
+    textCol.appendChild(urlEl);
+
+    const hintCode = document.createElement("p");
+    hintCode.className = "tado-auth-hint";
+    hintCode.textContent = "Oder Code manuell eingeben:";
+    textCol.appendChild(hintCode);
+
+    const codeEl = document.createElement("div");
+    codeEl.className = "tado-auth-code";
+    codeEl.textContent = info.userCode;
+    textCol.appendChild(codeEl);
+
+    body.appendChild(textCol);
+
+    // ── Waiting indicator ─────────────────────────────────────────────────
+    const wait = document.createElement("p");
+    wait.className = "tado-auth-hint tado-auth-wait";
+    wait.innerHTML = `<span class="tado-spinner"></span> Warte auf Bestätigung …`;
+
+    screen.appendChild(body);
+    screen.appendChild(wait);
     return screen;
   },
 

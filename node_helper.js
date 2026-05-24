@@ -24,6 +24,7 @@ const NodeHelper = require("node_helper");
 const https      = require("https");
 const fs         = require("fs");
 const path       = require("path");
+const QRCode     = require("qrcode");
 
 // ── Tado / OAuth constants ────────────────────────────────────────────────────
 const TADO_AUTH_HOST = "login.tado.com";
@@ -99,10 +100,25 @@ module.exports = NodeHelper.create({
 
       this.authState = STATE.AWAITING_AUTH;
 
+      // Generate QR code as inline SVG so the user can scan instead of typing the URL
+      const verificationUri = res.verification_uri_complete || res.verification_uri;
+      let qrSvg = null;
+      try {
+        qrSvg = await QRCode.toString(verificationUri, {
+          type:          "svg",
+          margin:        1,
+          color:         { dark: "#000000", light: "#ffffff" },
+          errorCorrectionLevel: "M"
+        });
+      } catch (qrErr) {
+        console.warn("[MMM-TadoOverview] QR code generation failed:", qrErr.message);
+      }
+
       this.sendSocketNotification("TADO_AUTH_REQUIRED", {
         userCode:        res.user_code,
-        verificationUri: res.verification_uri_complete || res.verification_uri,
-        expiresIn:       res.expires_in
+        verificationUri: verificationUri,
+        expiresIn:       res.expires_in,
+        qrSvg:           qrSvg
       });
 
       this.pollForToken(

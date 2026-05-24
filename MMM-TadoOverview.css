@@ -220,17 +220,15 @@
 
 /* ── Device-code authorisation screen ───────────────────────────────────────── */
 .tado-auth-screen {
-  max-width: 420px;
-  margin: 0 auto;
-  padding: 18px 20px 22px;
-  border-radius: 18px;
+  display: inline-block;
+  padding: 20px 22px 18px;
+  border-radius: 20px;
   background: linear-gradient(145deg, #1a237e 0%, #283593 60%, #3949AB 100%);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
-  text-align: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 .tado-auth-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #ffffff;
   margin-bottom: 16px;
@@ -238,53 +236,124 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .tado-auth-icon {
-  font-size: 20px;
+  font-size: 18px;
 }
 
+/* Two-column layout: QR code on the left, URL + code on the right */
 .tado-auth-body {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+/* ── QR column ─────────────────────────────────────────────────────────────── */
+.tado-auth-qr-col {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* White card around the QR so dark backgrounds don't break scanners */
+.tado-auth-qr-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px;
+  line-height: 0;   /* removes gap below inline SVG */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.tado-auth-qr-wrap svg {
+  display: block;
+  width:  160px;
+  height: 160px;
+}
+
+/* ── Vertical divider between columns ──────────────────────────────────────── */
+.tado-auth-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  align-self: stretch;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.tado-auth-divider::before,
+.tado-auth-divider::after {
+  content: "";
+  display: block;
+  width: 1px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tado-auth-divider span {
+  padding: 4px 0;
+}
+
+/* ── Text column (URL + code) ──────────────────────────────────────────────── */
+.tado-auth-text-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 200px;
+  max-width: 240px;
 }
 
 .tado-auth-hint {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
   margin: 0;
   line-height: 1.4;
 }
 
 /* The full verification URL */
 .tado-auth-url {
-  font-size: 13px;
-  font-weight: 600;
-  color: #82B1FF;
+  font-size: 11px;
+  font-weight: 500;
+  color: #90CAF9;
   word-break: break-all;
   background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 7px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+/* The short user code – large enough to read from across the room */
+.tado-auth-code {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 5px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.13);
   border-radius: 10px;
   padding: 8px 14px;
   width: 100%;
   box-sizing: border-box;
+  text-align: center;
 }
 
-/* The short user code – shown large for easy reading from across the room */
-.tado-auth-code {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: 6px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 10px 20px;
-}
-
+/* Waiting spinner row – full width below both columns */
 .tado-auth-wait {
   display: flex;
   align-items: center;
-  gap: 8px;
   justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
 }
