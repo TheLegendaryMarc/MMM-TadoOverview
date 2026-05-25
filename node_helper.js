@@ -260,23 +260,9 @@ module.exports = NodeHelper.create({
   async fetchAllRooms() {
     try {
       const homeId = await this.getHomeId();
-      const zones  = await this.tadoGet(`/homes/${homeId}/${this.apiRoomSegment}`);
-
-      const heatingZones = zones.filter(z => z.type === "HEATING");
-
-      console.log(
-        `[MMM-TadoOverview] ${heatingZones.length} Raum/Räume von der Tado API erhalten:`,
-        heatingZones.map(z => `"${z.name}" (ID ${z.id})`).join(", ")
-      );
-
-      if (heatingZones.length === 0) {
-        this.sendSocketNotification("TADO_DATA", []);
-        return;
-      }
-
-      const rooms = await Promise.all(
-        heatingZones.map(zone => this.fetchZoneState(homeId, zone))
-      );
+      const rooms  = this.apiRoomSegment === API_ROOMS_X
+        ? await this.fetchRoomsX(homeId)
+        : await this.fetchRoomsV3(homeId);
 
       rooms.sort((a, b) => a.name.localeCompare(b.name));
       this.sendSocketNotification("TADO_DATA", rooms);
@@ -287,8 +273,48 @@ module.exports = NodeHelper.create({
     }
   },
 
-  async fetchZoneState(homeId, zone) {
-    const state  = await this.tadoGet(`/homes/${homeId}/${this.apiRoomSegment}/${zone.id}/state`);
+  // ── Generation X (/rooms – state already included in list response) ─────────
+
+  async fetchRoomsX(homeId) {
+    const rooms = await this.tadoGet(`/homes/${homeId}/rooms`);
+
+    console.log(
+      `[MMM-TadoOverview] ${rooms.length} Raum/Räume von der Tado API (Gen X) erhalten:`,
+      rooms.map(r => `"${r.name}" (ID ${r.id})`).join(", ")
+    );
+
+    return rooms.map(room => ({
+      id:           room.id,
+      name:         room.name,
+      // Gen X: insideTemperature.value (not .celsius)
+      temperature:  room.sensorDataPoints?.insideTemperature?.value  ?? null,
+      humidity:     room.sensorDataPoints?.humidity?.percentage       ?? null,
+      // Gen X: heatingPower is top-level (not nested in activityDataPoints)
+      heatingPower: room.heatingPower?.percentage                     ?? 0,
+      // Gen X: manualControlTermination !== null means manual override active
+      overlayType:  room.manualControlTermination != null ? "MANUAL" : null,
+      tadoMode:     null   // not present in Gen X room response
+    }));
+  },
+
+  // ── Generation V3 (/zones + separate /state call per zone) ──────────────────
+
+  async fetchRoomsV3(homeId) {
+    const zones        = await this.tadoGet(`/homes/${homeId}/zones`);
+    const heatingZones = zones.filter(z => z.type === "HEATING");
+
+    console.log(
+      `[MMM-TadoOverview] ${heatingZones.length} Raum/Räume von der Tado API (V3) erhalten:`,
+      heatingZones.map(z => `"${z.name}" (ID ${z.id})`).join(", ")
+    );
+
+    if (heatingZones.length === 0) return [];
+
+    return Promise.all(heatingZones.map(zone => this.fetchZoneStateV3(homeId, zone)));
+  },
+
+  async fetchZoneStateV3(homeId, zone) {
+    const state  = await this.tadoGet(`/homes/${homeId}/zones/${zone.id}/state`);
     const inside = state.sensorDataPoints?.insideTemperature;
     const hum    = state.sensorDataPoints?.humidity;
     const heat   = state.activityDataPoints?.heatingPower;
@@ -296,9 +322,10 @@ module.exports = NodeHelper.create({
     return {
       id:           zone.id,
       name:         zone.name,
-      temperature:  inside != null ? inside.celsius    : null,
-      humidity:     hum    != null ? hum.percentage    : null,
-      heatingPower: heat   != null ? heat.percentage   : 0,
+      // V3: insideTemperature.celsius
+      temperature:  inside != null ? inside.celsius   : null,
+      humidity:     hum    != null ? hum.percentage   : null,
+      heatingPower: heat   != null ? heat.percentage  : 0,
       tadoMode:     state.tadoMode      || null,
       overlayType:  state.overlay?.type || null
     };
