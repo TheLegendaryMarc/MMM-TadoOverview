@@ -5,33 +5,32 @@
 
 /* ── Container ──────────────────────────────────────────────────────────── */
 .tado-overview {
-  padding: 4px;
+  padding: 2px;
 }
 
-/* ── Responsive tile grid ────────────────────────────────────────────────── */
+/* ── Tile grid – 2 columns, more if space allows ─────────────────────────── */
 .tado-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
-  padding: 4px 0;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  padding: 2px 0;
 }
 
 /* ── Base tile ───────────────────────────────────────────────────────────── */
 .tado-tile {
-  border-radius: 18px;
-  padding: 14px 16px 12px;
-  min-height: 130px;
+  border-radius: 12px;
+  padding: 8px 10px 7px;
+  min-height: 85px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  transition: background 0.6s ease, box-shadow 0.3s ease;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  transition: background 0.6s ease;
   overflow: hidden;
   position: relative;
 }
 
 .tado-tile::before {
-  /* subtle gloss highlight at the top */
   content: "";
   position: absolute;
   top: 0;
@@ -43,7 +42,7 @@
     rgba(255, 255, 255, 0.12) 0%,
     rgba(255, 255, 255, 0.00) 100%
   );
-  border-radius: 18px 18px 0 0;
+  border-radius: 12px 12px 0 0;
   pointer-events: none;
 }
 
@@ -76,11 +75,11 @@
 
 /* ── Room name ───────────────────────────────────────────────────────────── */
 .tado-room-name {
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.82);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -94,15 +93,15 @@
 }
 
 .tado-temperature {
-  font-size: 38px;
+  font-size: 26px;
   font-weight: 200;
   color: #ffffff;
   line-height: 1;
-  letter-spacing: -1px;
+  letter-spacing: -0.5px;
 }
 
 .tado-unit {
-  font-size: 18px;
+  font-size: 12px;
   font-weight: 400;
   vertical-align: super;
   margin-left: 1px;
@@ -110,7 +109,7 @@
 }
 
 .tado-no-data {
-  font-size: 32px;
+  font-size: 22px;
   opacity: 0.6;
 }
 
@@ -119,29 +118,29 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 4px;
+  margin-top: 3px;
 }
 
 /* ── Humidity ────────────────────────────────────────────────────────────── */
 .tado-humidity {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 13px;
+  gap: 2px;
+  font-size: 10px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.82);
 }
 
 .tado-pct {
-  font-size: 11px;
+  font-size: 9px;
   opacity: 0.75;
 }
 
 /* ── SVG icons ───────────────────────────────────────────────────────────── */
 .tado-svg-icon {
-  width:  13px;
-  height: 13px;
+  width:  10px;
+  height: 10px;
   fill:   rgba(255, 255, 255, 0.75);
   flex-shrink: 0;
   vertical-align: middle;
@@ -151,11 +150,11 @@
 .tado-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10px;
+  gap: 2px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.3px;
-  padding: 2px 6px;
+  letter-spacing: 0.2px;
+  padding: 1px 5px;
   border-radius: 20px;
   background: rgba(0, 0, 0, 0.22);
   color: rgba(255, 255, 255, 0.9);
