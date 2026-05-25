@@ -32,6 +32,8 @@ const API_HOST_V3    = "my.tado.com";    // Tado V3+ devices
 const API_HOST_X     = "hops.tado.com";  // Tado Generation X (LINE_X)
 const API_BASE_V3    = "/api/v2";        // path prefix for V3
 const API_BASE_X     = "";               // Gen X has no /api/v2 prefix
+const API_ROOMS_V3   = "zones";          // V3  room segment: /homes/{id}/zones
+const API_ROOMS_X    = "rooms";          // Gen X room segment: /homes/{id}/rooms
 const CLIENT_ID      = "1bb50063-6b0c-4d11-bd99-387f4a91cc46";
 const SCOPE          = "offline_access";
 const TOKEN_FILE     = path.join(__dirname, ".tado-tokens.json");
@@ -53,8 +55,9 @@ module.exports = NodeHelper.create({
     this.tokenExpiry  = 0;
     this.refreshToken = null;
     this.homeId       = null;
-    this.apiHost      = API_HOST_V3;   // updated after /homes/{id} reveals the device generation
-    this.apiBasePath  = API_BASE_V3;   // "/api/v2" for V3, "" for Gen X
+    this.apiHost        = API_HOST_V3;   // updated after /homes/{id} reveals the device generation
+    this.apiBasePath    = API_BASE_V3;   // "/api/v2" for V3, "" for Gen X
+    this.apiRoomSegment = API_ROOMS_V3;  // "zones" for V3, "rooms" for Gen X
     this.dataTimer    = null;
     this.pollTimer    = null;
   },
@@ -222,9 +225,10 @@ module.exports = NodeHelper.create({
       this.refreshToken = null;
       this.accessToken  = null;
       this.tokenExpiry  = 0;
-      this.homeId       = null;
-      this.apiHost      = API_HOST_V3;   // reset to default until /homes/{id} is called again
-      this.apiBasePath  = API_BASE_V3;
+      this.homeId         = null;
+      this.apiHost        = API_HOST_V3;   // reset to defaults until /homes/{id} is called again
+      this.apiBasePath    = API_BASE_V3;
+      this.apiRoomSegment = API_ROOMS_V3;
       this.deleteStoredTokens();
       clearInterval(this.dataTimer);
       this.dataTimer = null;
@@ -256,7 +260,7 @@ module.exports = NodeHelper.create({
   async fetchAllRooms() {
     try {
       const homeId = await this.getHomeId();
-      const zones  = await this.tadoGet(`/homes/${homeId}/zones`);
+      const zones  = await this.tadoGet(`/homes/${homeId}/${this.apiRoomSegment}`);
 
       const heatingZones = zones.filter(z => z.type === "HEATING");
 
@@ -284,7 +288,7 @@ module.exports = NodeHelper.create({
   },
 
   async fetchZoneState(homeId, zone) {
-    const state  = await this.tadoGet(`/homes/${homeId}/zones/${zone.id}/state`);
+    const state  = await this.tadoGet(`/homes/${homeId}/${this.apiRoomSegment}/${zone.id}/state`);
     const inside = state.sensorDataPoints?.insideTemperature;
     const hum    = state.sensorDataPoints?.humidity;
     const heat   = state.activityDataPoints?.heatingPower;
@@ -316,13 +320,15 @@ module.exports = NodeHelper.create({
     const generation = homeInfo.generation ?? "unbekannt";
 
     if (generation === "LINE_X") {
-      this.apiHost     = API_HOST_X;
-      this.apiBasePath = API_BASE_X;
-      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (${generation}) → ${API_HOST_X} (kein /api/v2-Präfix)`);
+      this.apiHost        = API_HOST_X;
+      this.apiBasePath    = API_BASE_X;
+      this.apiRoomSegment = API_ROOMS_X;
+      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (${generation}) → ${API_HOST_X}, Pfad: /homes/{id}/rooms`);
     } else {
-      this.apiHost     = API_HOST_V3;
-      this.apiBasePath = API_BASE_V3;
-      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${generation}) → ${API_HOST_V3}/api/v2`);
+      this.apiHost        = API_HOST_V3;
+      this.apiBasePath    = API_BASE_V3;
+      this.apiRoomSegment = API_ROOMS_V3;
+      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${generation}) → ${API_HOST_V3}/api/v2, Pfad: /homes/{id}/zones`);
     }
 
     return this.homeId;
