@@ -92,11 +92,8 @@ Add the following block to your `config/config.js`:
     tempHot:    25,   // below this → orange tile, above → red tile
 
     // ── Optional: display toggles ─────────────────────────────────────────
-    showHumidity:      true,    // show humidity reading
-    showHeatingPower:  true,    // show heating % badge when active
-    showManualOverlay: true,    // show "Manual" badge when active
-    showTadoMode:      false,   // show Home / Away badge
-    units:             "metric" // "metric" = °C | "imperial" = °F
+    showHumidity: true,    // show humidity reading
+    units:        "metric" // "metric" = °C | "imperial" = °F
   }
 }
 ```
@@ -112,9 +109,6 @@ Add the following block to your `config/config.js`:
 | `tempNormal` | Number | `22` | Upper bound for "normal" colour (°C) |
 | `tempHot` | Number | `25` | Upper bound for "warm" colour, above = "hot" (°C) |
 | `showHumidity` | Boolean | `true` | Display humidity below temperature |
-| `showHeatingPower` | Boolean | `true` | Show active heating percentage |
-| `showManualOverlay` | Boolean | `true` | Show badge when room is in manual mode |
-| `showTadoMode` | Boolean | `false` | Show Home / Away status badge |
 | `units` | String | `"metric"` | Temperature unit: `"metric"` (°C) or `"imperial"` (°F) |
 
 ---

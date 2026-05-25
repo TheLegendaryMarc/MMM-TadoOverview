@@ -28,11 +28,8 @@ Module.register("MMM-TadoOverview", {
     tempHot:    25,
 
     // ── Display options ───────────────────────────────────────────────────
-    showHumidity:      true,
-    showHeatingPower:  true,
-    showManualOverlay: true,
-    showTadoMode:      false,  // HOME / AWAY badge
-    units:             "metric"   // "metric" = °C | "imperial" = °F
+    showHumidity: true,
+    units:        "metric"   // "metric" = °C | "imperial" = °F
   },
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -235,34 +232,6 @@ Module.register("MMM-TadoOverview", {
            <path d="M12 2C6 10 4 14 4 16a8 8 0 0 0 16 0c0-2-2-6-8-14z"/>
          </svg>${Math.round(room.humidity)}<span class="tado-pct">%</span>`;
       bottom.appendChild(hum);
-    }
-
-    if (this.config.showHeatingPower && room.heatingPower > 0) {
-      const heat = document.createElement("span");
-      heat.className = "tado-badge tado-badge-heat";
-      heat.innerHTML =
-        `<svg class="tado-svg-icon" viewBox="0 0 24 24">
-           <path d="M13.5 0.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41
-                    3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51
-                    4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61
-                    17.41 3.8 13.5 0.67z"/>
-         </svg>${Math.round(room.heatingPower)}%`;
-      bottom.appendChild(heat);
-    }
-
-    if (this.config.showManualOverlay && room.overlayType === "MANUAL") {
-      const manual = document.createElement("span");
-      manual.className   = "tado-badge tado-badge-manual";
-      manual.textContent = "Manuell";
-      bottom.appendChild(manual);
-    }
-
-    if (this.config.showTadoMode && room.tadoMode) {
-      const mode = document.createElement("span");
-      mode.className =
-        `tado-badge ${room.tadoMode === "HOME" ? "tado-badge-home" : "tado-badge-away"}`;
-      mode.textContent = room.tadoMode === "HOME" ? "Zuhause" : "Abwesend";
-      bottom.appendChild(mode);
     }
 
     tile.appendChild(bottom);
