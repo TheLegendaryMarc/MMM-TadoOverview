@@ -30,6 +30,8 @@ const QRCode     = require("qrcode");
 const TADO_AUTH_HOST = "login.tado.com";
 const API_HOST_V3    = "my.tado.com";    // Tado V3+ devices
 const API_HOST_X     = "hops.tado.com";  // Tado Generation X (LINE_X)
+const API_BASE_V3    = "/api/v2";        // path prefix for V3
+const API_BASE_X     = "";               // Gen X has no /api/v2 prefix
 const CLIENT_ID      = "1bb50063-6b0c-4d11-bd99-387f4a91cc46";
 const SCOPE          = "offline_access";
 const TOKEN_FILE     = path.join(__dirname, ".tado-tokens.json");
@@ -51,7 +53,8 @@ module.exports = NodeHelper.create({
     this.tokenExpiry  = 0;
     this.refreshToken = null;
     this.homeId       = null;
-    this.apiHost      = API_HOST_V3;   // updated after /me reveals the device generation
+    this.apiHost      = API_HOST_V3;   // updated after /homes/{id} reveals the device generation
+    this.apiBasePath  = API_BASE_V3;   // "/api/v2" for V3, "" for Gen X
     this.dataTimer    = null;
     this.pollTimer    = null;
   },
@@ -220,7 +223,8 @@ module.exports = NodeHelper.create({
       this.accessToken  = null;
       this.tokenExpiry  = 0;
       this.homeId       = null;
-      this.apiHost      = API_HOST_V3;   // reset to default until /me is called again
+      this.apiHost      = API_HOST_V3;   // reset to default until /homes/{id} is called again
+      this.apiBasePath  = API_BASE_V3;
       this.deleteStoredTokens();
       clearInterval(this.dataTimer);
       this.dataTimer = null;
@@ -252,7 +256,7 @@ module.exports = NodeHelper.create({
   async fetchAllRooms() {
     try {
       const homeId = await this.getHomeId();
-      const zones  = await this.tadoGet(`/api/v2/homes/${homeId}/zones`);
+      const zones  = await this.tadoGet(`/homes/${homeId}/zones`);
 
       const heatingZones = zones.filter(z => z.type === "HEATING");
 
@@ -280,7 +284,7 @@ module.exports = NodeHelper.create({
   },
 
   async fetchZoneState(homeId, zone) {
-    const state  = await this.tadoGet(`/api/v2/homes/${homeId}/zones/${zone.id}/state`);
+    const state  = await this.tadoGet(`/homes/${homeId}/zones/${zone.id}/state`);
     const inside = state.sensorDataPoints?.insideTemperature;
     const hum    = state.sensorDataPoints?.humidity;
     const heat   = state.activityDataPoints?.heatingPower;
@@ -299,23 +303,26 @@ module.exports = NodeHelper.create({
   async getHomeId() {
     if (this.homeId) return this.homeId;
 
-    // Step 1: /api/v2/me → home ID (always on my.tado.com, common entry point)
-    const me = await this.tadoGet("/api/v2/me");
+    // Step 1: GET /me → home ID
+    // Always on my.tado.com with /api/v2 prefix (apiHost + apiBasePath still at V3 defaults)
+    const me = await this.tadoGet("/me");
     if (!me.homes?.length) throw new Error("Kein Tado-Zuhause für dieses Konto gefunden.");
     this.homeId = me.homes[0].id;
     console.log(`[MMM-TadoOverview] Home ID: ${this.homeId}`);
 
-    // Step 2: /api/v2/homes/{homeId} → generation field
-    // This call still goes to my.tado.com (this.apiHost is still API_HOST_V3 here)
-    const homeInfo = await this.tadoGet(`/api/v2/homes/${this.homeId}`);
+    // Step 2: GET /homes/{homeId} → read "generation" field
+    // Still on my.tado.com / /api/v2 – apiHost and apiBasePath not yet updated
+    const homeInfo = await this.tadoGet(`/homes/${this.homeId}`);
     const generation = homeInfo.generation ?? "unbekannt";
 
     if (generation === "LINE_X") {
-      this.apiHost = API_HOST_X;
-      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (${generation}) → API-Host: ${API_HOST_X}`);
+      this.apiHost     = API_HOST_X;
+      this.apiBasePath = API_BASE_X;
+      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (${generation}) → ${API_HOST_X} (kein /api/v2-Präfix)`);
     } else {
-      this.apiHost = API_HOST_V3;
-      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${generation}) → API-Host: ${API_HOST_V3}`);
+      this.apiHost     = API_HOST_V3;
+      this.apiBasePath = API_BASE_V3;
+      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${generation}) → ${API_HOST_V3}/api/v2`);
     }
 
     return this.homeId;
@@ -325,7 +332,7 @@ module.exports = NodeHelper.create({
     await this.ensureAccessToken();
     return this.httpsRequest({
       hostname: this.apiHost,
-      path,
+      path:     this.apiBasePath + path,
       method:   "GET",
       headers:  { Authorization: `Bearer ${this.accessToken}` }
     });
