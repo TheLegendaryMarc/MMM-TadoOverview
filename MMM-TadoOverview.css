@@ -16,63 +16,39 @@
   padding: 2px 0;
 }
 
-/* ── Base tile ───────────────────────────────────────────────────────────── */
+/* ── Base tile – neutral dark background, coloured border ────────────────── */
 .tado-tile {
   border-radius: 12px;
   padding: 10px 8px 9px;
   min-height: 105px;
   display: flex;
   flex-direction: column;
-  align-items: center;          /* centre all children horizontally */
+  align-items: center;
   justify-content: space-between;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
-  transition: background 0.6s ease;
+  background: rgba(0, 0, 0, 0.28);
+  border: 2px solid transparent;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.6s ease;
   overflow: hidden;
   position: relative;
 }
 
-.tado-tile::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 45%;
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.12) 0%,
-    rgba(255, 255, 255, 0.00) 100%
-  );
-  border-radius: 12px 12px 0 0;
-  pointer-events: none;
-}
-
-/* ── Temperature colour themes ───────────────────────────────────────────── */
+/* ── Temperature colour themes – border only ────────────────────────────── */
 
 /* Cold  – < tempCold   (default: 18 °C) */
-.tado-temp-cold {
-  background: linear-gradient(145deg, #1565C0 0%, #1E88E5 60%, #42A5F5 100%);
-}
+.tado-temp-cold    { border-color: #1E88E5; }
 
 /* Cool  – < tempNormal (default: 22 °C) */
-.tado-temp-cool {
-  background: linear-gradient(145deg, #00695C 0%, #00897B 60%, #26A69A 100%);
-}
+.tado-temp-cool    { border-color: #00897B; }
 
 /* Warm  – < tempHot    (default: 25 °C) */
-.tado-temp-warm {
-  background: linear-gradient(145deg, #E65100 0%, #FB8C00 60%, #FFA726 100%);
-}
+.tado-temp-warm    { border-color: #FB8C00; }
 
 /* Hot   – >= tempHot */
-.tado-temp-hot {
-  background: linear-gradient(145deg, #B71C1C 0%, #E53935 60%, #EF5350 100%);
-}
+.tado-temp-hot     { border-color: #E53935; }
 
 /* Unknown / no sensor data */
-.tado-temp-unknown {
-  background: linear-gradient(145deg, #37474F 0%, #546E7A 60%, #78909C 100%);
-}
+.tado-temp-unknown { border-color: #546E7A; }
 
 /* ── Room name – centred, clearly readable ───────────────────────────────── */
 .tado-room-name {
@@ -103,6 +79,14 @@
   line-height: 1;
   letter-spacing: -1px;
   text-align: center;
+}
+
+/* Decimal part – visually smaller than the integer */
+.tado-temp-decimal {
+  font-size: 18px;
+  font-weight: 300;
+  opacity: 0.75;
+  letter-spacing: 0;
 }
 
 .tado-unit {

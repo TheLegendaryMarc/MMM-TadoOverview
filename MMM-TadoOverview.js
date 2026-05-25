@@ -208,12 +208,16 @@ Module.register("MMM-TadoOverview", {
     tempEl.className = "tado-temperature";
 
     if (room.temperature != null) {
-      const value    = this.config.units === "imperial"
+      const value   = this.config.units === "imperial"
         ? this.celsiusToFahrenheit(room.temperature)
         : room.temperature;
-      const unitLbl  = this.config.units === "imperial" ? "°F" : "°C";
+      const unitLbl = this.config.units === "imperial" ? "°F" : "°C";
+      // Split into integer and decimal so the fractional part renders smaller
+      const intPart = Math.floor(value);
+      const decPart = (value % 1).toFixed(1).substring(1); // e.g. ".5"
       tempEl.innerHTML =
-        `${value.toFixed(1)}<span class="tado-unit">${unitLbl}</span>`;
+        `${intPart}<span class="tado-temp-decimal">${decPart}</span>`
+        + `<span class="tado-unit">${unitLbl}</span>`;
     } else {
       tempEl.innerHTML = `<span class="tado-no-data">—</span>`;
     }
