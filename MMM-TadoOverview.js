@@ -20,7 +20,7 @@ Module.register("MMM-TadoOverview", {
 
   defaults: {
     // ── Refresh interval ─────────────────────────────────────────────────
-    updateInterval: 5 * 60 * 1000,   // 5 minutes
+    updateInterval: 30 * 60 * 1000,  // 30 minutes (Tado API rate limit)
 
     // ── Temperature thresholds (°C) ───────────────────────────────────────
     tempCold:   18,

@@ -84,7 +84,7 @@ Add the following block to your `config/config.js`:
   config: {
 
     // ── Optional: update interval (milliseconds) ──────────────────────────
-    updateInterval: 5 * 60 * 1000,   // default: every 5 minutes
+    updateInterval: 30 * 60 * 1000,  // default: every 30 minutes (API rate limit)
 
     // ── Optional: temperature thresholds (°C) ─────────────────────────────
     tempCold:   18,   // below this → blue tile
@@ -104,7 +104,7 @@ Add the following block to your `config/config.js`:
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `updateInterval` | Number | `300000` | Refresh interval in ms (minimum: 60 000) |
+| `updateInterval` | Number | `1800000` | Refresh interval in ms – default 30 min due to Tado API rate limit |
 | `tempCold` | Number | `18` | Upper bound for "cold" colour (°C) |
 | `tempNormal` | Number | `22` | Upper bound for "normal" colour (°C) |
 | `tempHot` | Number | `25` | Upper bound for "warm" colour, above = "hot" (°C) |
