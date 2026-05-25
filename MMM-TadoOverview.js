@@ -154,17 +154,11 @@ Module.register("MMM-TadoOverview", {
 
       const qrWrap = document.createElement("div");
       qrWrap.className = "tado-auth-qr-wrap";
-      qrWrap.innerHTML = info.qrSvg;   // inline SVG – no extra request needed
-
-      const qrLabel = document.createElement("p");
-      qrLabel.className = "tado-auth-hint";
-      qrLabel.textContent = "QR-Code scannen";
+      qrWrap.innerHTML = info.qrSvg;
 
       qrCol.appendChild(qrWrap);
-      qrCol.appendChild(qrLabel);
       body.appendChild(qrCol);
 
-      // Divider
       const divider = document.createElement("div");
       divider.className = "tado-auth-divider";
       divider.innerHTML = `<span>oder</span>`;
@@ -175,20 +169,10 @@ Module.register("MMM-TadoOverview", {
     const textCol = document.createElement("div");
     textCol.className = "tado-auth-text-col";
 
-    const hintUrl = document.createElement("p");
-    hintUrl.className = "tado-auth-hint";
-    hintUrl.textContent = "Diese Adresse im Browser öffnen:";
-    textCol.appendChild(hintUrl);
-
     const urlEl = document.createElement("div");
     urlEl.className = "tado-auth-url";
     urlEl.textContent = info.verificationUri;
     textCol.appendChild(urlEl);
-
-    const hintCode = document.createElement("p");
-    hintCode.className = "tado-auth-hint";
-    hintCode.textContent = "Oder Code manuell eingeben:";
-    textCol.appendChild(hintCode);
 
     const codeEl = document.createElement("div");
     codeEl.className = "tado-auth-code";
@@ -200,7 +184,7 @@ Module.register("MMM-TadoOverview", {
     // ── Waiting indicator ─────────────────────────────────────────────────
     const wait = document.createElement("p");
     wait.className = "tado-auth-hint tado-auth-wait";
-    wait.innerHTML = `<span class="tado-spinner"></span> Warte auf Bestätigung …`;
+    wait.innerHTML = `<span class="tado-spinner"></span> Warte …`;
 
     screen.appendChild(body);
     screen.appendChild(wait);
