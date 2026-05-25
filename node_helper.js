@@ -28,7 +28,8 @@ const QRCode     = require("qrcode");
 
 // ── Tado / OAuth constants ────────────────────────────────────────────────────
 const TADO_AUTH_HOST = "login.tado.com";
-const TADO_API_HOST  = "my.tado.com";
+const API_HOST_V3    = "my.tado.com";    // Tado V3+ devices
+const API_HOST_X     = "hops.tado.com";  // Tado Generation X (LINE_X)
 const CLIENT_ID      = "1bb50063-6b0c-4d11-bd99-387f4a91cc46";
 const SCOPE          = "offline_access";
 const TOKEN_FILE     = path.join(__dirname, ".tado-tokens.json");
@@ -50,6 +51,7 @@ module.exports = NodeHelper.create({
     this.tokenExpiry  = 0;
     this.refreshToken = null;
     this.homeId       = null;
+    this.apiHost      = API_HOST_V3;   // updated after /me reveals the device generation
     this.dataTimer    = null;
     this.pollTimer    = null;
   },
@@ -218,6 +220,7 @@ module.exports = NodeHelper.create({
       this.accessToken  = null;
       this.tokenExpiry  = 0;
       this.homeId       = null;
+      this.apiHost      = API_HOST_V3;   // reset to default until /me is called again
       this.deleteStoredTokens();
       clearInterval(this.dataTimer);
       this.dataTimer = null;
@@ -295,9 +298,24 @@ module.exports = NodeHelper.create({
 
   async getHomeId() {
     if (this.homeId) return this.homeId;
+
+    // /api/v2/me is always served by the V3 host – it is the common entry point
+    // for both device generations and contains the generation identifier.
     const me = await this.tadoGet("/api/v2/me");
     if (!me.homes?.length) throw new Error("Kein Tado-Zuhause für dieses Konto gefunden.");
-    this.homeId = me.homes[0].id;
+
+    const home = me.homes[0];
+    this.homeId = home.id;
+
+    // Select the correct API host based on the device generation reported by Tado
+    if (home.generation === "LINE_X") {
+      this.apiHost = API_HOST_X;
+      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (LINE_X) → API-Host: ${API_HOST_X}`);
+    } else {
+      this.apiHost = API_HOST_V3;
+      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${home.generation ?? "unbekannt"}) → API-Host: ${API_HOST_V3}`);
+    }
+
     console.log(`[MMM-TadoOverview] Home ID: ${this.homeId}`);
     return this.homeId;
   },
@@ -305,7 +323,7 @@ module.exports = NodeHelper.create({
   async tadoGet(path) {
     await this.ensureAccessToken();
     return this.httpsRequest({
-      hostname: TADO_API_HOST,
+      hostname: this.apiHost,
       path,
       method:   "GET",
       headers:  { Authorization: `Bearer ${this.accessToken}` }
