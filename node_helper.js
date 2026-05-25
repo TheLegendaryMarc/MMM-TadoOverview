@@ -299,24 +299,25 @@ module.exports = NodeHelper.create({
   async getHomeId() {
     if (this.homeId) return this.homeId;
 
-    // /api/v2/me is always served by the V3 host – it is the common entry point
-    // for both device generations and contains the generation identifier.
+    // Step 1: /api/v2/me → home ID (always on my.tado.com, common entry point)
     const me = await this.tadoGet("/api/v2/me");
     if (!me.homes?.length) throw new Error("Kein Tado-Zuhause für dieses Konto gefunden.");
+    this.homeId = me.homes[0].id;
+    console.log(`[MMM-TadoOverview] Home ID: ${this.homeId}`);
 
-    const home = me.homes[0];
-    this.homeId = home.id;
+    // Step 2: /api/v2/homes/{homeId} → generation field
+    // This call still goes to my.tado.com (this.apiHost is still API_HOST_V3 here)
+    const homeInfo = await this.tadoGet(`/api/v2/homes/${this.homeId}`);
+    const generation = homeInfo.generation ?? "unbekannt";
 
-    // Select the correct API host based on the device generation reported by Tado
-    if (home.generation === "LINE_X") {
+    if (generation === "LINE_X") {
       this.apiHost = API_HOST_X;
-      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (LINE_X) → API-Host: ${API_HOST_X}`);
+      console.log(`[MMM-TadoOverview] Tado Generation X erkannt (${generation}) → API-Host: ${API_HOST_X}`);
     } else {
       this.apiHost = API_HOST_V3;
-      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${home.generation ?? "unbekannt"}) → API-Host: ${API_HOST_V3}`);
+      console.log(`[MMM-TadoOverview] Tado Generation V3 erkannt (${generation}) → API-Host: ${API_HOST_V3}`);
     }
 
-    console.log(`[MMM-TadoOverview] Home ID: ${this.homeId}`);
     return this.homeId;
   },
 
